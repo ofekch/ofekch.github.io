@@ -259,6 +259,12 @@
     line-height: 1;
   }
 
+  .pad-name strong.phrase {
+    font-size: 16px;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+  }
+
   .alt {
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
     font-size: 12px;
@@ -344,7 +350,7 @@
     <div class="grid" id="grid"></div>
     <footer>
       <span>hit again to cut and restart</span>
-      <span>keys Q W E R A S D · also 1–7</span>
+      <span>keys Q W E R A S D F · also 1–8</span>
     </footer>
   </main>
   <script>
@@ -356,6 +362,7 @@
       { id: "wow", file: "sounds/wow.wav?v=2", key: "a", num: "5", accent: "#ff4d7a", ink: "#ffffff" },
       { id: "bruh", file: "sounds/bruh.wav?v=3", key: "s", num: "6", accent: "#c6f54e", ink: "#172006" },
       { id: "boom", file: "sounds/boom.wav?v=2", key: "d", num: "7", accent: "#ff5a36", ink: "#ffffff" },
+      { id: "redeem", label: "why did you redeem it?", file: "sounds/redeem.wav?v=1", key: "f", num: "8", accent: "#d946ef", ink: "#ffffff" },
     ];
 
     const BARS = 42;
@@ -429,7 +436,7 @@
           <span class="time">···</span>
         </span>
         <span class="pad-name">
-          <strong>${name}</strong>
+          <strong class="${name.length > 12 ? "phrase" : ""}">${name}</strong>
           <span class="alt">${spec.num}</span>
         </span>
         <span class="wave"></span>
