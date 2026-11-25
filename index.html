@@ -352,7 +352,7 @@
       { id: "pidipiu", file: "sounds/pidipiu.wav?v=2", key: "q", num: "1", accent: "#7c6bff", ink: "#ffffff" },
       { id: "pidipiu2", file: "sounds/pidipiu2.wav?v=2", key: "w", num: "2", accent: "#14c4b0", ink: "#06211e" },
       { id: "fah", file: "sounds/fah.wav?v=2", key: "e", num: "3", accent: "#ffb703", ink: "#1c1403" },
-      { id: "state", file: "sounds/state.wav?v=3", key: "r", num: "4", accent: "#3b8bff", ink: "#ffffff" },
+      { id: "state", label: "STATE?!", file: "sounds/state.wav?v=3", key: "r", num: "4", accent: "#3b8bff", ink: "#ffffff" },
       { id: "wow", file: "sounds/wow.wav?v=2", key: "a", num: "5", accent: "#ff4d7a", ink: "#ffffff" },
       { id: "bruh", file: "sounds/bruh.wav?v=2", key: "s", num: "6", accent: "#c6f54e", ink: "#172006" },
       { id: "boom", file: "sounds/boom.wav?v=2", key: "d", num: "7", accent: "#ff5a36", ink: "#ffffff" },
@@ -420,7 +420,8 @@
       button.style.setProperty("--accent", spec.accent);
       button.style.setProperty("--ink", spec.ink);
       button.setAttribute("aria-keyshortcuts", `${spec.key.toUpperCase()} ${spec.num}`);
-      button.setAttribute("aria-label", `${spec.id}, key ${spec.key.toUpperCase()}`);
+      const name = spec.label || spec.id;
+      button.setAttribute("aria-label", `${name}, key ${spec.key.toUpperCase()}`);
 
       button.innerHTML = `
         <span class="pad-top">
@@ -428,7 +429,7 @@
           <span class="time">···</span>
         </span>
         <span class="pad-name">
-          <strong>${spec.id}</strong>
+          <strong>${name}</strong>
           <span class="alt">${spec.num}</span>
         </span>
         <span class="wave"></span>
