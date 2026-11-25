@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0e10">
+<title>Soundboard</title>
+<style>
+  :root {
+    --bg: #0c0c0e;
+    --chassis: #17171a;
+    --chassis-edge: #2c2c31;
+    --ink: #f4f4f5;
+    --muted: #9a9aa3;
+    --danger: #ff5a36;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background:
+      radial-gradient(1200px 700px at 50% -10%, #222228 0%, transparent 55%),
+      var(--bg);
+    color: var(--ink);
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: 28px 18px 36px;
+  }
+
+  .chassis {
+    position: relative;
+    width: min(980px, 100%);
+    background:
+      linear-gradient(180deg, #1d1d21 0%, var(--chassis) 28%, #141416 100%);
+    border: 1px solid var(--chassis-edge);
+    border-radius: 28px;
+    padding: 22px 22px 18px;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 30px 70px rgba(0, 0, 0, 0.45);
+  }
+
+  .screw {
+    position: absolute;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 30%, #6d6d74, #2a2a2e 45%, #121214 70%);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.7), 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  .screw::after {
+    content: "";
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    top: 5px;
+    height: 1px;
+    background: rgba(0, 0, 0, 0.65);
+    transform: rotate(42deg);
+  }
+  .screw.tl { top: 12px; left: 12px; }
+  .screw.tr { top: 12px; right: 12px; }
+  .screw.bl { bottom: 12px; left: 12px; }
+  .screw.br { bottom: 12px; right: 12px; }
+
+  header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 8px 10px 18px;
+  }
+
+  .mark {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .mark h1 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 650;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+
+  .status {
+    margin: 0;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    letter-spacing: 0.01em;
+  }
+
+  .status.live { color: #d7f58a; }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .vol {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 116px;
+    height: 4px;
+    border-radius: 99px;
+    background: #2c2c31;
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #f4f4f5;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+  }
+
+  button.stop {
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid #34343a;
+    border-radius: 9px;
+    background: #121214;
+    color: #d4d4d8;
+    font: 600 12px/1 ui-monospace, "SF Mono", Menlo, monospace;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    box-shadow: 0 2px 0 #000;
+  }
+  button.stop:active {
+    transform: translateY(2px);
+    box-shadow: none;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+
+  .pad {
+    --accent: #7c6bff;
+    --ink: #fff;
+    --lip: rgba(0, 0, 0, 0.38);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 188px;
+    padding: 14px 14px 12px;
+    border: 0;
+    border-radius: 18px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 86%, white) 0%, var(--accent) 42%, color-mix(in srgb, var(--accent) 78%, black) 100%);
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.35),
+      0 5px 0 var(--lip),
+      0 12px 22px rgba(0, 0, 0, 0.28);
+    transform: translateY(0);
+    transition: transform 45ms linear, box-shadow 45ms linear, filter 80ms linear;
+    contain: layout style;
+  }
+
+  .pad:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
+  }
+
+  .pad.down {
+    transform: translateY(5px);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      0 0 0 var(--lip),
+      0 4px 10px rgba(0, 0, 0, 0.25);
+  }
+
+  .pad.playing {
+    filter: brightness(1.06) saturate(1.08);
+  }
+
+  .pad.loading {
+    filter: grayscale(0.35) brightness(0.75);
+    cursor: progress;
+  }
+
+  .pad.error {
+    filter: grayscale(1) brightness(0.55);
+    cursor: not-allowed;
+  }
+
+  .pad-top, .pad-name {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    height: 30px;
+    padding: 0 8px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.22);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      0 1px 0 rgba(0, 0, 0, 0.25);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+
+  .time {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.72;
+  }
+
+  .pad-name strong {
+    font-size: 30px;
+    font-weight: 650;
+    letter-spacing: -0.04em;
+    line-height: 1;
+  }
+
+  .alt {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.7;
+  }
+
+  .wave {
+    position: relative;
+    height: 38px;
+    margin-top: 12px;
+  }
+
+  .bars, .lit {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 100%;
+  }
+
+  .lit {
+    position: absolute;
+    inset: 0;
+    clip-path: inset(0 100% 0 0);
+  }
+
+  .bars i, .lit i {
+    flex: 1 1 0;
+    min-height: 2px;
+    border-radius: 1px;
+    background: currentColor;
+  }
+
+  .bars i { opacity: 0.28; }
+  .lit i { opacity: 0.95; }
+
+  footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 10px 6px;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+  }
+
+  @media (max-width: 760px) {
+    .grid { grid-template-columns: 1fr 1fr; }
+    header { flex-direction: column; align-items: flex-start; }
+    .pad-name strong { font-size: 24px; }
+    footer { flex-direction: column; }
+  }
+
+  @media (max-width: 460px) {
+    .grid { grid-template-columns: 1fr; }
+    .pad { min-height: 148px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pad { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="chassis">
+    <span class="screw tl"></span>
+    <span class="screw tr"></span>
+    <span class="screw bl"></span>
+    <span class="screw br"></span>
+    <header>
+      <div class="mark">
+        <h1>Soundboard</h1>
+        <p class="status" id="status">decoding…</p>
+      </div>
+      <div class="controls">
+        <label class="vol">Vol
+          <input id="volume" type="range" min="0" max="1" step="0.01" value="0.9" aria-label="Volume">
+        </label>
+        <button class="stop" id="stop" type="button">ESC stop</button>
+      </div>
+    </header>
+    <div class="grid" id="grid"></div>
+    <footer>
+      <span>hit again to cut and restart</span>
+      <span>keys Q W E A S D · also 1–6</span>
+    </footer>
+  </main>
+  <script>
+    const SOUNDS = [
+      { id: "pidipiu", file: "sounds/pidipiu.wav?v=2", key: "q", num: "1", accent: "#7c6bff", ink: "#ffffff" },
+      { id: "pidipiu2", file: "sounds/pidipiu2.wav?v=2", key: "w", num: "2", accent: "#14c4b0", ink: "#06211e" },
+      { id: "fah", file: "sounds/fah.wav?v=2", key: "e", num: "3", accent: "#ffb703", ink: "#1c1403" },
+      { id: "wow", file: "sounds/wow.wav?v=2", key: "a", num: "4", accent: "#ff4d7a", ink: "#ffffff" },
+      { id: "bruh", file: "sounds/bruh.wav?v=2", key: "s", num: "5", accent: "#c6f54e", ink: "#172006" },
+      { id: "boom", file: "sounds/boom.wav?v=2", key: "d", num: "6", accent: "#ff5a36", ink: "#ffffff" },
+    ];
+
+    const BARS = 42;
+    const CUT = 0.003;
+
+    const ctx = new AudioContext({ latencyHint: "interactive" });
+    const master = ctx.createGain();
+    master.gain.value = 0.9;
+    master.connect(ctx.destination);
+
+    const pads = new Map();
+    const byKey = new Map();
+    const grid = document.getElementById("grid");
+    const statusEl = document.getElementById("status");
+    const volume = document.getElementById("volume");
+
+    const saved = localStorage.getItem("soundboard-volume");
+    if (saved !== null) {
+      volume.value = saved;
+      master.gain.value = Number(saved);
+    }
+
+    volume.addEventListener("input", () => {
+      master.gain.value = Number(volume.value);
+      localStorage.setItem("soundboard-volume", volume.value);
+    });
+
+    function peaks(buffer) {
+      const data = buffer.getChannelData(0);
+      const block = Math.max(1, Math.floor(data.length / BARS));
+      const step = Math.max(1, Math.floor(block / 48));
+      const out = [];
+      for (let i = 0; i < BARS; i++) {
+        let max = 0;
+        const start = i * block;
+        const end = Math.min(data.length, start + block);
+        for (let j = start; j < end; j += step) {
+          const v = data[j] < 0 ? -data[j] : data[j];
+          if (v > max) max = v;
+        }
+        out.push(Math.pow(max, 0.62));
+      }
+      const peak = Math.max(...out, 0.0001);
+      return out.map((v) => Math.max(0.06, v / peak));
+    }
+
+    function bars(values) {
+      const row = document.createElement("div");
+      row.className = "bars";
+      for (const v of values) {
+        const i = document.createElement("i");
+        i.style.height = `${Math.round(v * 100)}%`;
+        row.appendChild(i);
+      }
+      return row;
+    }
+
+    function makePad(spec) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "pad loading";
+      button.style.setProperty("--accent", spec.accent);
+      button.style.setProperty("--ink", spec.ink);
+      button.setAttribute("aria-keyshortcuts", `${spec.key.toUpperCase()} ${spec.num}`);
+      button.setAttribute("aria-label", `${spec.id}, key ${spec.key.toUpperCase()}`);
+
+      button.innerHTML = `
+        <span class="pad-top">
+          <span class="kbd">${spec.key.toUpperCase()}</span>
+          <span class="time">···</span>
+        </span>
+        <span class="pad-name">
+          <strong>${spec.id}</strong>
+          <span class="alt">${spec.num}</span>
+        </span>
+        <span class="wave"></span>
+      `;
+
+      const wave = button.querySelector(".wave");
+      const placeholder = new Array(BARS).fill(0.18);
+      const dim = bars(placeholder);
+      const lit = bars(placeholder);
+      lit.classList.add("lit");
+      wave.append(dim, lit);
+
+      const pad = {
+        ...spec,
+        el: button,
+        time: button.querySelector(".time"),
+        dim,
+        lit,
+        buffer: null,
+        voice: null,
+        startedAt: 0,
+      };
+
+      button.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
+        button.setPointerCapture(e.pointerId);
+        button.classList.add("down");
+        trigger(pad);
+      });
+      button.addEventListener("pointerup", () => button.classList.remove("down"));
+      button.addEventListener("pointercancel", () => button.classList.remove("down"));
+      button.addEventListener("contextmenu", (e) => e.preventDefault());
+
+      grid.appendChild(button);
+      pads.set(spec.id, pad);
+      byKey.set(spec.key, pad);
+      byKey.set(spec.num, pad);
+      return pad;
+    }
+
+    function paint(pad, values) {
+      const rows = [pad.dim, pad.lit];
+      rows.forEach((row) => {
+        [...row.children].forEach((bar, i) => {
+          bar.style.height = `${Math.round(values[i] * 100)}%`;
+        });
+      });
+    }
+
+    function setHead(pad, ratio) {
+      const rest = Math.max(0, Math.min(1, 1 - ratio)) * 100;
+      pad.lit.style.clipPath = `inset(0 ${rest}% 0 0)`;
+    }
+
+    function kill(pad, when) {
+      const voice = pad.voice;
+      if (!voice) return;
+      pad.voice = null;
+      const gain = voice.gain.gain;
+      gain.cancelScheduledValues(when);
+      gain.setValueAtTime(gain.value, when);
+      gain.linearRampToValueAtTime(0, when + CUT);
+      try { voice.source.stop(when + CUT); } catch (_) {}
+    }
+
+    function trigger(pad) {
+      if (!pad.buffer) return;
+      if (ctx.state === "suspended") ctx.resume();
+
+      const now = ctx.currentTime;
+      kill(pad, now);
+
+      const source = ctx.createBufferSource();
+      source.buffer = pad.buffer;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(1, now + CUT);
+      source.connect(gain);
+      gain.connect(master);
+      source.start(now);
+
+      const voice = { source, gain };
+      pad.voice = voice;
+      pad.startedAt = now;
+      pad.el.classList.add("playing");
+      setHead(pad, 0);
+
+      source.onended = () => {
+        source.disconnect();
+        gain.disconnect();
+        if (pad.voice === voice) {
+          pad.voice = null;
+          pad.el.classList.remove("playing");
+          setHead(pad, 0);
+        }
+      };
+    }
+
+    function stopAll() {
+      const now = ctx.currentTime;
+      for (const pad of pads.values()) {
+        kill(pad, now);
+        pad.el.classList.remove("playing", "down");
+        setHead(pad, 0);
+      }
+    }
+
+    document.getElementById("stop").addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      stopAll();
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "Escape") {
+        stopAll();
+        return;
+      }
+      const pad = byKey.get(e.key.toLowerCase());
+      if (!pad) return;
+      e.preventDefault();
+      pad.el.classList.add("down");
+      trigger(pad);
+    });
+
+    window.addEventListener("keyup", (e) => {
+      const pad = byKey.get(e.key.toLowerCase());
+      if (pad) pad.el.classList.remove("down");
+    });
+
+    window.addEventListener("blur", () => {
+      for (const pad of pads.values()) pad.el.classList.remove("down");
+    });
+
+    function frame() {
+      const now = ctx.currentTime;
+      for (const pad of pads.values()) {
+        if (!pad.voice || !pad.buffer) continue;
+        setHead(pad, (now - pad.startedAt) / pad.buffer.duration);
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+
+    async function load(pad) {
+      try {
+        const res = await fetch(pad.file);
+        if (!res.ok) throw new Error(String(res.status));
+        const raw = await res.arrayBuffer();
+        pad.buffer = await ctx.decodeAudioData(raw);
+        const shape = peaks(pad.buffer);
+        paint(pad, shape);
+        pad.time.textContent = `${pad.buffer.duration.toFixed(1)}s`;
+        pad.el.classList.remove("loading");
+      } catch (err) {
+        pad.el.classList.remove("loading");
+        pad.el.classList.add("error");
+        pad.time.textContent = "fail";
+        console.error(pad.id, err);
+      }
+    }
+
+    SOUNDS.forEach(makePad);
+
+    Promise.all([...pads.values()].map(load)).then(() => {
+      const failed = [...pads.values()].filter((p) => !p.buffer).length;
+      const ready = pads.size - failed;
+      statusEl.textContent = failed
+        ? `${ready} ready · ${failed} failed`
+        : "ready";
+      statusEl.classList.toggle("live", ready > 0);
+    });
+  </script>
+</body>
+</html>
