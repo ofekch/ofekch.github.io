@@ -272,19 +272,6 @@
     opacity: 0.7;
   }
 
-  .alt.remove {
-    width: 22px;
-    height: 22px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 6px;
-    background: rgba(0, 0, 0, 0.22);
-    font-size: 14px;
-    line-height: 1;
-    cursor: pointer;
-  }
-
   .wave {
     position: relative;
     height: 38px;
@@ -333,8 +320,10 @@
   }
 
   @media (max-width: 460px) {
-    .grid { grid-template-columns: 1fr; }
-    .pad { min-height: 148px; }
+    .grid { grid-template-columns: 1fr 1fr; }
+    .pad { min-height: 132px; }
+    .pad-name strong { font-size: 18px; }
+    .pad-name strong.phrase { font-size: 13px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -357,14 +346,12 @@
         <label class="vol">Vol
           <input id="volume" type="range" min="0" max="1" step="0.01" value="0.9" aria-label="Volume">
         </label>
-        <button class="stop" id="add" type="button">Add</button>
-        <input id="upload" type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac,.webm" multiple hidden>
         <button class="stop" id="stop" type="button">ESC stop</button>
       </div>
     </header>
     <div class="grid" id="grid"></div>
     <footer>
-      <span>hit again to restart · added clips stay on this browser</span>
+      <span>hit again to cut and restart</span>
       <span>keys Q W E R A S D F · also 1–8</span>
     </footer>
   </main>
@@ -383,7 +370,9 @@
     const BARS = 42;
     const CUT = 0.003;
 
-    const ctx = new AudioContext({ latencyHint: "interactive" });
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const ctx = new AudioCtx(ios ? undefined : { latencyHint: "interactive" });
     const master = ctx.createGain();
     master.gain.value = 0.9;
     master.connect(ctx.destination);
@@ -441,7 +430,7 @@
       button.className = "pad loading";
       button.style.setProperty("--accent", spec.accent);
       button.style.setProperty("--ink", spec.ink);
-      button.setAttribute("aria-keyshortcuts", spec.num ? `${spec.key.toUpperCase()} ${spec.num}` : spec.key.toUpperCase());
+      button.setAttribute("aria-keyshortcuts", `${spec.key.toUpperCase()} ${spec.num}`);
       const name = spec.label || spec.id;
       button.setAttribute("aria-label", `${name}, key ${spec.key.toUpperCase()}`);
 
@@ -452,7 +441,7 @@
         </span>
         <span class="pad-name">
           <strong class="${name.length > 12 ? "phrase" : ""}">${name}</strong>
-          <span class="alt${spec.custom ? " remove" : ""}">${spec.custom ? "×" : spec.num}</span>
+          <span class="alt">${spec.num}</span>
         </span>
         <span class="wave"></span>
       `;
@@ -476,27 +465,20 @@
       };
 
       button.addEventListener("pointerdown", (e) => {
-        if (e.button !== 0) return;
-        button.setPointerCapture(e.pointerId);
+        if (e.button > 0) return;
+        e.preventDefault();
         button.classList.add("down");
-        trigger(pad);
+        try { button.setPointerCapture(e.pointerId); } catch (_) {}
+        play(pad);
       });
       button.addEventListener("pointerup", () => button.classList.remove("down"));
       button.addEventListener("pointercancel", () => button.classList.remove("down"));
       button.addEventListener("contextmenu", (e) => e.preventDefault());
 
-      if (spec.custom) {
-        button.querySelector(".remove").addEventListener("pointerdown", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          removePad(pad);
-        });
-      }
-
       grid.appendChild(button);
       pads.set(spec.id, pad);
       byKey.set(spec.key, pad);
-      if (spec.num) byKey.set(spec.num, pad);
+      byKey.set(spec.num, pad);
       return pad;
     }
 
@@ -525,9 +507,68 @@
       try { voice.source.stop(when + CUT); } catch (_) {}
     }
 
+    let unlocked = false;
+
+    function unlock() {
+      if (ctx.state !== "running") ctx.resume();
+      if (unlocked) return;
+      unlocked = true;
+      const silent = ctx.createBuffer(1, 1, ctx.sampleRate);
+      const node = ctx.createBufferSource();
+      node.buffer = silent;
+      node.connect(ctx.destination);
+      try { node.start(0); } catch (_) {}
+      for (const pad of pads.values()) warm(pad);
+    }
+
+    function decode(bytes) {
+      return new Promise((resolve, reject) => {
+        ctx.decodeAudioData(bytes.slice(0), resolve, reject);
+      });
+    }
+
+    function warm(pad) {
+      if (pad.buffer) {
+        if (pad.playWhenReady) {
+          pad.playWhenReady = false;
+          trigger(pad);
+        }
+        return;
+      }
+      if (pad.decoding || !pad.bytes) return;
+      pad.decoding = true;
+      decode(pad.bytes).then((buffer) => {
+        pad.buffer = buffer;
+        pad.decoding = false;
+        arm(pad);
+        if (pad.playWhenReady) {
+          pad.playWhenReady = false;
+          trigger(pad);
+        }
+        if ([...pads.values()].every((item) => item.buffer || item.el.classList.contains("error"))) {
+          statusEl.textContent = "ready";
+          statusEl.classList.add("live");
+        }
+      }).catch((err) => {
+        pad.decoding = false;
+        pad.playWhenReady = false;
+        markFailed(pad);
+        console.error(pad.id, err);
+      });
+    }
+
+    function play(pad) {
+      unlock();
+      if (pad.buffer) {
+        trigger(pad);
+        return;
+      }
+      pad.playWhenReady = true;
+      warm(pad);
+    }
+
     function trigger(pad) {
       if (!pad.buffer) return;
-      if (ctx.state === "suspended") ctx.resume();
 
       const now = ctx.currentTime;
       kill(pad, now);
@@ -582,7 +623,7 @@
       if (!pad) return;
       e.preventDefault();
       pad.el.classList.add("down");
-      trigger(pad);
+      play(pad);
     });
 
     window.addEventListener("keyup", (e) => {
@@ -620,7 +661,13 @@
       try {
         const res = await fetch(pad.file);
         if (!res.ok) throw new Error(String(res.status));
-        pad.buffer = await ctx.decodeAudioData(await res.arrayBuffer());
+        pad.bytes = await res.arrayBuffer();
+        if (ios) {
+          pad.el.classList.remove("loading");
+          pad.time.textContent = "tap";
+          return;
+        }
+        pad.buffer = await decode(pad.bytes);
         arm(pad);
       } catch (err) {
         markFailed(pad);
@@ -628,133 +675,17 @@
       }
     }
 
-    const FREE_KEYS = "tyughjklzxcvbnm90".split("");
-    const CUSTOM_COLORS = [
-      ["#f4f1ea", "#161616"],
-      ["#7ee0ff", "#042028"],
-      ["#ff8bd2", "#ffffff"],
-      ["#ffe14a", "#1c1603"],
-      ["#c4b5fd", "#1a1033"],
-    ];
-
-    function nextKey() {
-      return FREE_KEYS.find((key) => !byKey.has(key)) || null;
-    }
-
-    function openDb() {
-      return new Promise((resolve, reject) => {
-        const request = indexedDB.open("soundboard", 1);
-        request.onupgradeneeded = () => {
-          request.result.createObjectStore("clips", { keyPath: "id" });
-        };
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-    }
-
-    function clipName(file) {
-      const base = file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
-      return (base || "clip").slice(0, 40);
-    }
-
-    async function remember(pad, bytes) {
-      const database = await openDb();
-      await new Promise((resolve, reject) => {
-        const tx = database.transaction("clips", "readwrite");
-        tx.objectStore("clips").put({
-          id: pad.id,
-          label: pad.label,
-          key: pad.key,
-          accent: pad.accent,
-          ink: pad.ink,
-          bytes,
-        });
-        tx.oncomplete = resolve;
-        tx.onerror = () => reject(tx.error);
-      });
-    }
-
-    async function removePad(pad) {
-      kill(pad, ctx.currentTime);
-      byKey.delete(pad.key);
-      if (pad.num) byKey.delete(pad.num);
-      pads.delete(pad.id);
-      pad.el.remove();
-      const database = await openDb();
-      await new Promise((resolve, reject) => {
-        const tx = database.transaction("clips", "readwrite");
-        tx.objectStore("clips").delete(pad.id);
-        tx.oncomplete = resolve;
-        tx.onerror = () => reject(tx.error);
-      });
-    }
-
-    async function addFile(file) {
-      const key = nextKey();
-      if (!key) {
-        statusEl.textContent = "no free keys";
-        return;
-      }
-      const bytes = await file.arrayBuffer();
-      const color = CUSTOM_COLORS[[...pads.values()].filter((pad) => pad.custom).length % CUSTOM_COLORS.length];
-      const pad = makePad({
-        id: `clip-${crypto.randomUUID()}`,
-        label: clipName(file),
-        key,
-        num: "",
-        accent: color[0],
-        ink: color[1],
-        custom: true,
-      });
-      try {
-        pad.buffer = await ctx.decodeAudioData(bytes.slice(0));
-        arm(pad);
-        await remember(pad, bytes);
-      } catch (err) {
-        byKey.delete(key);
-        pads.delete(pad.id);
-        pad.el.remove();
-        statusEl.textContent = `couldn't read ${file.name}`;
-        console.error(file.name, err);
-      }
-    }
-
-    async function loadSaved() {
-      const database = await openDb();
-      const clips = await new Promise((resolve, reject) => {
-        const request = database.transaction("clips", "readonly").objectStore("clips").getAll();
-        request.onsuccess = () => resolve(request.result || []);
-        request.onerror = () => reject(request.error);
-      });
-      for (const clip of clips) {
-        const key = byKey.has(clip.key) ? nextKey() : clip.key;
-        if (!key) continue;
-        const pad = makePad({ ...clip, key, num: "", custom: true });
-        try {
-          pad.buffer = await ctx.decodeAudioData(clip.bytes.slice(0));
-          arm(pad);
-          if (key !== clip.key) await remember(pad, clip.bytes);
-        } catch (err) {
-          markFailed(pad);
-          console.error(clip.id, err);
-        }
-      }
-    }
-
-    document.getElementById("add").addEventListener("click", () => {
-      document.getElementById("upload").click();
-    });
-
-    document.getElementById("upload").addEventListener("change", async (event) => {
-      const files = [...event.target.files];
-      event.target.value = "";
-      for (const file of files) await addFile(file);
-    });
+    document.addEventListener("touchstart", () => unlock(), { passive: true });
 
     SOUNDS.forEach(makePad);
 
-    Promise.all([...pads.values()].map(load).concat(loadSaved())).then(() => {
-      const failed = [...pads.values()].filter((pad) => !pad.buffer).length;
+    Promise.all([...pads.values()].map(load)).then(() => {
+      const failed = [...pads.values()].filter((pad) => pad.el.classList.contains("error")).length;
+      if (ios && failed === 0) {
+        statusEl.textContent = "tap a pad";
+        statusEl.classList.add("live");
+        return;
+      }
       const ready = pads.size - failed;
       statusEl.textContent = failed
         ? `${ready} ready · ${failed} failed`
