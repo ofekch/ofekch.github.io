@@ -371,8 +371,8 @@
     const CUT = 0.003;
 
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    const ctx = new AudioCtx(ios ? undefined : { latencyHint: "interactive" });
+    const touchPlay = navigator.maxTouchPoints > 0;
+    const ctx = new AudioCtx(touchPlay ? undefined : { latencyHint: "interactive" });
     const master = ctx.createGain();
     master.gain.value = 0.9;
     master.connect(ctx.destination);
@@ -390,8 +390,12 @@
     }
 
     volume.addEventListener("input", () => {
-      master.gain.value = Number(volume.value);
+      const level = Number(volume.value);
+      master.gain.value = level;
       localStorage.setItem("soundboard-volume", volume.value);
+      for (const pad of pads.values()) {
+        if (pad.audio) pad.audio.volume = level;
+      }
     });
 
     function peaks(buffer) {
@@ -466,11 +470,17 @@
 
       button.addEventListener("pointerdown", (e) => {
         if (e.button > 0) return;
-        e.preventDefault();
         button.classList.add("down");
+        if (touchPlay) return;
         try { button.setPointerCapture(e.pointerId); } catch (_) {}
         play(pad);
       });
+      if (touchPlay) {
+        button.addEventListener("touchend", (e) => {
+          play(pad);
+          e.preventDefault();
+        });
+      }
       button.addEventListener("pointerup", () => button.classList.remove("down"));
       button.addEventListener("pointercancel", () => button.classList.remove("down"));
       button.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -518,52 +528,114 @@
       node.buffer = silent;
       node.connect(ctx.destination);
       try { node.start(0); } catch (_) {}
-      for (const pad of pads.values()) warm(pad);
     }
 
     function decode(bytes) {
+      const copy = bytes.slice(0);
       return new Promise((resolve, reject) => {
-        ctx.decodeAudioData(bytes.slice(0), resolve, reject);
+        let settled = false;
+        const ok = (buffer) => {
+          if (!settled) {
+            settled = true;
+            resolve(buffer);
+          }
+        };
+        const bad = (err) => {
+          if (!settled) {
+            settled = true;
+            reject(err instanceof Error ? err : new Error("decode failed"));
+          }
+        };
+        try {
+          const pending = ctx.decodeAudioData(copy, ok, bad);
+          if (pending && typeof pending.then === "function") pending.then(ok, bad);
+        } catch (err) {
+          bad(err);
+        }
       });
     }
 
-    function warm(pad) {
-      if (pad.buffer) {
-        if (pad.playWhenReady) {
-          pad.playWhenReady = false;
-          trigger(pad);
+    function element(pad) {
+      if (pad.audio) return pad.audio;
+      const audio = new Audio(pad.file);
+      audio.preload = "auto";
+      audio.playsInline = true;
+      audio.setAttribute("playsinline", "");
+      audio.style.display = "none";
+      audio.addEventListener("loadedmetadata", () => {
+        if (!pad.buffer) {
+          pad.time.textContent = `${audio.duration.toFixed(1)}s`;
+          pad.el.classList.remove("loading");
         }
-        return;
+      });
+      audio.addEventListener("ended", () => {
+        if (pad.usingElement) {
+          pad.usingElement = false;
+          pad.el.classList.remove("playing");
+          setHead(pad, 0);
+        }
+      });
+      document.body.appendChild(audio);
+      pad.audio = audio;
+      return audio;
+    }
+
+    function playElement(pad) {
+      const audio = element(pad);
+      audio.volume = Number(volume.value) || 1;
+      try {
+        audio.pause();
+        audio.currentTime = 0;
+      } catch (_) {}
+      pad.usingElement = true;
+      pad.el.classList.add("playing");
+      setHead(pad, 0);
+      const pending = audio.play();
+      if (pending) {
+        pending.then(() => {
+          statusEl.textContent = "ready";
+          statusEl.classList.add("live");
+        }).catch(() => {
+          pad.usingElement = false;
+          pad.el.classList.remove("playing");
+          statusEl.textContent = "phone blocked the sound";
+          statusEl.classList.remove("live");
+        });
       }
-      if (pad.decoding || !pad.bytes) return;
+    }
+
+    function warm(pad) {
+      if (pad.buffer || pad.decoding || !pad.bytes) return;
       pad.decoding = true;
       decode(pad.bytes).then((buffer) => {
         pad.buffer = buffer;
         pad.decoding = false;
         arm(pad);
-        if (pad.playWhenReady) {
-          pad.playWhenReady = false;
-          trigger(pad);
-        }
         if ([...pads.values()].every((item) => item.buffer || item.el.classList.contains("error"))) {
           statusEl.textContent = "ready";
           statusEl.classList.add("live");
         }
       }).catch((err) => {
         pad.decoding = false;
-        pad.playWhenReady = false;
         markFailed(pad);
         console.error(pad.id, err);
       });
     }
 
     function play(pad) {
+      const nowMs = performance.now();
+      if (pad.lastHit && nowMs - pad.lastHit < 40) return;
+      pad.lastHit = nowMs;
       unlock();
+      if (touchPlay) {
+        playElement(pad);
+        return;
+      }
       if (pad.buffer) {
         trigger(pad);
         return;
       }
-      pad.playWhenReady = true;
+      playElement(pad);
       warm(pad);
     }
 
@@ -576,8 +648,7 @@
       const source = ctx.createBufferSource();
       source.buffer = pad.buffer;
       const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(1, now + CUT);
+      gain.gain.setValueAtTime(1, now);
       source.connect(gain);
       gain.connect(master);
       source.start(now);
@@ -603,6 +674,13 @@
       const now = ctx.currentTime;
       for (const pad of pads.values()) {
         kill(pad, now);
+        if (pad.audio) {
+          try {
+            pad.audio.pause();
+            pad.audio.currentTime = 0;
+          } catch (_) {}
+        }
+        pad.usingElement = false;
         pad.el.classList.remove("playing", "down");
         setHead(pad, 0);
       }
@@ -638,6 +716,10 @@
     function frame() {
       const now = ctx.currentTime;
       for (const pad of pads.values()) {
+        if (pad.usingElement && pad.audio && !pad.audio.paused && pad.audio.duration) {
+          setHead(pad, pad.audio.currentTime / pad.audio.duration);
+          continue;
+        }
         if (!pad.voice || !pad.buffer) continue;
         setHead(pad, (now - pad.startedAt) / pad.buffer.duration);
       }
@@ -662,9 +744,13 @@
         const res = await fetch(pad.file);
         if (!res.ok) throw new Error(String(res.status));
         pad.bytes = await res.arrayBuffer();
-        if (ios) {
+        element(pad);
+        if (touchPlay) {
           pad.el.classList.remove("loading");
-          pad.time.textContent = "tap";
+          decode(pad.bytes).then((buffer) => {
+            pad.buffer = buffer;
+            arm(pad);
+          }).catch((err) => console.error(pad.id, err));
           return;
         }
         pad.buffer = await decode(pad.bytes);
@@ -675,17 +761,10 @@
       }
     }
 
-    document.addEventListener("touchstart", () => unlock(), { passive: true });
-
     SOUNDS.forEach(makePad);
 
     Promise.all([...pads.values()].map(load)).then(() => {
       const failed = [...pads.values()].filter((pad) => pad.el.classList.contains("error")).length;
-      if (ios && failed === 0) {
-        statusEl.textContent = "tap a pad";
-        statusEl.classList.add("live");
-        return;
-      }
       const ready = pads.size - failed;
       statusEl.textContent = failed
         ? `${ready} ready · ${failed} failed`
